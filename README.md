@@ -54,18 +54,18 @@ The final value of `count` is problematically off by 1. It is common to see this
 Depending on the language there are a few solutions. 
 
 1. Only use one thread. Sure, you are stuck with the performance of one CPU but you don't have to worry about this.
-   a. Python does this. The Global Interpreter Lock (GIL) is awesome until your code's performance isn't enough
-   b. JavaScript does this. Code sets up callbacks that get executed by a single thread in the background.
-   c. Most languages do this by default unless you purposely start another thread
+   * Python does this. The Global Interpreter Lock (GIL) is awesome until your code's performance isn't enough
+   * JavaScript does this. Code sets up callbacks that get executed by a single thread in the background.
+   * Most languages do this by default unless you purposely start another thread
 2. User-space code or data locking
-   a. Isolave what code runs. C, C++, Java and most languages capable of parallel processing have this. For example, the `pthread` library in C lets you setup mutual exclusion (aka mutex) locks that you can lock and unlock so that only one chunk of code runs at a time, presumably variables that must reliably be updated.
-   b. Isolate what data is used. Rust's channels are a good example of this. Ownership of the data is passed around, ensuring only one thread modifies it at a time.
+   * Isolave what code runs. C, C++, Java and most languages capable of parallel processing have this. For example, the `pthread` library in C lets you setup mutual exclusion (aka mutex) locks that you can lock and unlock so that only one chunk of code runs at a time, presumably variables that must reliably be updated.
+   * Isolate what data is used. Rust's channels are a good example of this. Ownership of the data is passed around, ensuring only one thread modifies it at a time.
 3. Hardware-based memory locking
-   a. Atomic compare-and-swap (CAS) style is probably best known. Your computer's hardware can enfore single threaded access to memory locations. For example see AMD64's `LOCK` keyword can be used on several operations, including the `ADD` opcode. 
-   b. Many languges with parallel processing wrap CAS-operations with convenient user-space methods and data structres. For example, Java exposes them with atomic variables and C/C++ have atomic keywords too.
+   * Atomic compare-and-swap (CAS) style is probably best known. Your computer's hardware can enfore single threaded access to memory locations. For example see AMD64's `LOCK` keyword can be used on several operations, including the `ADD` opcode. 
+   * Many languges with parallel processing wrap CAS-operations with convenient user-space methods and data structres. For example, Java exposes them with atomic variables and C/C++ have atomic keywords too.
 
 It isn't that CAS-style operations are best, but they are typically very fast for general purpose use. They are also what this repo is focusing on. That is why they get all the attention here.
-
+ 
 ## Example Code
 The [AMD64 ArchitectureProgrammer’s Manual](https://www.amd.com/system/files/TechDocs/24594.pdf) section 1.2.5 notes the key stuff we're using here: `LOCK`.
 
