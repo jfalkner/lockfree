@@ -14,5 +14,5 @@ gcc -mcx16 -L ../src -o test_hashmap test_hashmap.o -lm -lpthread -llockfree -la
 
 # run
 export LD_LIBRARY_PATH=../src
-#gdb -ex run --args ./test_list
+#gdb -ex run --args ./test_hashmap
 ./test_hashmap

@@ -1,79 +1,107 @@
 #include <stdio.h>
 
-#include "list.h"
 #include "hashmap.h"
-
-#define cas(dst, old, new) __sync_bool_compare_and_swap((dst), (old), (new))
-#define unlock_bucket(index) map->bucket_locks[(index)] = 0
 
 
 void *
-hashmap_new(uint8_t num_threads, uint32_t hint, uint8_t cmp(const void *x, const void *y), uint32_t hash(const void *key))
+hashmap_new(uint32_t num_buckets, uint8_t cmp(const void *x, const void *y), uint32_t hash(const void *key))
 {
-	hashmap_t *map = calloc(1, sizeof(hashmap_t));
-	map->num_buckets = hint;
-	map->buckets = calloc(hint, sizeof(list_t *));
-	for (int i=0;i<hint;i++) {
-		map->buckets[i] = list_new(num_threads);
-	}
+	hashmap *map = calloc(1, sizeof(hashmap));
+	map->num_buckets = num_buckets;
+	map->buckets = calloc(num_buckets, sizeof(hashmap_keyval *));
+	// keep local reference of the two utility functions
 	map->hash = hash;
 	map->cmp = cmp;
+	// tracked CAS retries for tests and debugging
+	map->put_retries = 0;
 	return map;
 }
 
 void *
-hashmap_get(hashmap_t *map, uint8_t thread_id, void *key)
+hashmap_get(hashmap *map, void *key)
 {
-	// find the bucket that would have the value
-	int index = map->hash(key) % map->num_buckets;
-	list_t *l = map->buckets[index];
+	// hash to convert the key to a bucket index where the value would be stored
+	uint32_t index = map->hash(key) % map->num_buckets;
 
-	// walk the nodes to find any matches
-	node_t *n = l->next;
+	// walk the linked list nodes to find any matches
+	hashmap_keyval *n = map->buckets[index];
 	while (n) {
-		keyval_t *kv = (keyval_t *)n->val;
-		if (map->cmp(kv->key, key) == 0) {
-			return kv->value;
+		if (map->cmp(n->key, key) == 0) {
+			return n->value;
 		}
 
 		n = n->next;
 	}
 
+	// no matches found
 	return NULL;
 }
 
-/**
- * Puts the given key, value pair in the map
- *
- * Returns true if the value was successfully added. Returns false if the value was not
- * added because it already exists in the map.
- *
- * It is assumed that memory management is occuring outside of the hashmap. If false is
- * returned it is safe to free the key and value that was used with the put.
- */
-bool
-hashmap_put(hashmap_t *map, uint8_t thread_id, void *key, void *value)
+void *
+hashmap_put(hashmap *map, void *key, void *value)
 {
-	// find the bucket that would have the value
-	int index = map->hash(key) % map->num_buckets;
+	// sanity checks
+	if (!map || !key) {
+		return NULL;
+	}
 
-	// make a struct to track this -- TODO: mempool these
-	keyval_t *kv = calloc(1, sizeof(keyval_t));
-	kv->key = key;
-	kv->value = value;
+	// hash to convert the key to a bucket index where the value would be stored
+	uint32_t bucket_index = map->hash(key) % map->num_buckets;
 
-	list_add(map->buckets[index], thread_id, kv);
+	hashmap_keyval *kv = NULL;
 	
-	return NULL;
-}
+	// known head and next entry to add to the list
+	hashmap_keyval *head = NULL;
+	hashmap_keyval *next = NULL;
 
-void
-hashmap_free(hashmap_t *map) {
-	// TODO: reclaim memory
-}
+	while (true) {
+		// copy the head of the list before checking entries for equality
+		head = map->buckets[bucket_index];
 
-bool
-hashmap_del(hashmap_t *map, uint8_t thread_id, void *key) {
-	// TODO: impplement -- use a callback for thread safety?
-	return true;
+		// find any existing matches to this key
+		if (head) {
+			for (kv = head; kv; kv = kv->next) {
+				if (map->cmp(key, kv->key) == 0) {
+					break;
+				}
+			}
+		}
+		// if the key exists, update and return it
+		if (kv) {
+			while (true) {
+				void *prev = kv->value;
+				bool success = __atomic_compare_exchange(&kv->value, &prev, &value, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
+				if (success) {
+					return prev;
+				}
+			}
+		}
+		// if the key doesn't exist, try adding it
+		else {
+			// make the next key-value pair to append
+			if (!next) {
+				next = malloc (sizeof (hashmap_keyval));
+				next->key = key;
+				next->value = value;
+				next->next = NULL;
+			}
+
+			// make sure the reference to existing nodes is kept
+			if (head) {
+				next->next = head;
+			}
+
+			// prepend the kv-pair or lazy-make the bucket
+			bool success = __atomic_compare_exchange(&map->buckets[bucket_index], &head, &next, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
+			if (success) {
+				__atomic_fetch_add(&map->length, 1, __ATOMIC_SEQ_CST);
+				return NULL;
+			}
+			// failure means another thead updated head before this one
+			else {
+				// track the CAS failure for tests -- non-atomic to minimize thread contention
+				map->put_retries += 1;
+			}
+		}
+	}
 }

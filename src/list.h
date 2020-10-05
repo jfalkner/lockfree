@@ -1,33 +1,32 @@
+/**
+ * Lock-Free Linked List
+ *
+ * This is an add-only linked list that does not use user-space mutexes. It relies on
+ * hardware specific memory locking, typically via compare-and-swap (CAS) operations.
+ * 
+ * The implementation currently is add-only.
+ */
 #ifndef JFALKNER_LIST_H
 #define JFALKNER_LIST_H
 
 #include <stdint.h>
 
-#define LIST_ONLY_THREAD -1
-#define LIST_NOOP_THREAD -2
 
-
-typedef struct node_s {
-	struct node_s *next;
+typedef struct list_node_s {
+	struct list_node_s *next;
 	void *val;
-} node_t;
+} list_node;
 
 typedef struct list_s {
 	// list of nodes in the linked-list
-	node_t *next;
-	node_t *last;
-	// track when deletes can safely be free'd
-	uint16_t max_threads;
-	uint16_t safe_cleanup_index;
-	struct list_s *cleanup_eventually;
-	struct list_s *cleanup_now;
+	list_node *head;
 	// tracking for CAS retries that is used by tests
-	uint32_t retries;
-} list_t;
+	uint32_t retries_empty;
+	uint32_t retries_populated;
+} list;
 
-list_t * list_new(uint16_t max_threads);
+list * list_new();
 
-void list_add(list_t *list, uint16_t thread_index, void *val);
-void list_del(list_t *list, uint16_t thread_index, void *val);
+void list_add(list *list, void *val);
 
 #endif // JFALKNER_LIST_H

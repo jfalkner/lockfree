@@ -5,14 +5,10 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-// include example use of libcii -- not thread safe
 #include "hashmap.h"
 
 // global hash map
-hashmap_t *map = NULL;
-
-// flag to indicate if workers should stop
-bool run = true;
+hashmap *map = NULL;
 
 // how many threads should run in parallel
 #define NUM_THREADS 10
@@ -50,7 +46,7 @@ add_vals(void *args)
 		int *val = malloc(sizeof(int));
 		*val = (*offset * NUM_WORK) + j;
 		// same key/val
-		hashmap_put(map, *offset, val, val);
+		hashmap_put(map, val, val);
 	}
 	return NULL;
 }
@@ -80,34 +76,35 @@ multi_thread_add_vals(void) {
 int
 main (int argc, char **argv)
 {
-	map = (hashmap_t *)hashmap_new(NUM_THREADS, 10, cmp_uint32, hash_uint32);
+	map = (hashmap *)hashmap_new(10, cmp_uint32, hash_uint32);
 
-	// multi-thread add values
-	printf("Adding Values\n");
-	if (!multi_thread_add_vals()) {
-		printf("Error. Failed to add values!");
-		return -1;
-	}
-	printf("Done\n");
+	int loops = 0;
+	while (map->put_retries < 10) {
+		loops += 1;
+		if (!multi_thread_add_vals()) {
+			printf("Error. Failed to add values!\n");
+			return -1;
+		}
 
-	// check all the list entries
-	uint32_t TOTAL = NUM_THREADS * NUM_WORK;
-	uint32_t found = 0;
-	for (uint32_t i=0;i<TOTAL;i++) {
-		uint32_t *v = (uint32_t *)hashmap_get(map, -1, &i);
-		if (v && *v == i) {
-			found++;
+		// check all the list entries
+		uint32_t TOTAL = NUM_THREADS * NUM_WORK;
+		uint32_t found = 0;
+		for (uint32_t i=0;i<TOTAL;i++) {
+			uint32_t *v = (uint32_t *)hashmap_get(map, &i);
+			if (v && *v == i) {
+				found++;
+			}
+			else {
+				printf("Cound not find %d in the map\n", i);
+			}
+		}
+		if (found == TOTAL) {
+			printf("Loop %d. All values found.\n", loops);
 		}
 		else {
-			printf("Cound not find %d in the map\n", i);
+			printf("Found %d of %d values. Where are the missing ones?", found, TOTAL);
 		}
-	}
-	if (found == TOTAL) {
-		printf("\nAll values found.\n");
-	}
-	else {
-		printf("Found %d of %d values. Where are the missing ones?", found, TOTAL);
-	}
 
-	// TODO: check deletes
+	}
+	printf("Done. Loops=%u\n", loops);
 }
