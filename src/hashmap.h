@@ -47,3 +47,11 @@ void * hashmap_get(hashmap *map, void *key);
  * returns NULL.
  */
 void * hashmap_put(hashmap *map, void *key, void *value);
+
+/**
+ * Removes the given key, value pair in the map
+ *
+ * Returns the removed value, if the key was found, else NULL. Memory management is assumed
+ * to be handled outside of the map for the key and value. 
+ */
+void * hashmap_del(hashmap *map, const void *key);

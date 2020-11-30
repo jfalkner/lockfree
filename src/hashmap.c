@@ -2,6 +2,10 @@
 
 #include "hashmap.h"
 
+// used for testing CAS-retries in tests
+uint32_t hashmap_del_fail = 0;
+uint32_t hashmap_del_fail_new_head = 0;
+
 
 void *
 hashmap_new(uint32_t num_buckets, uint8_t cmp(const void *x, const void *y), uint32_t hash(const void *key))
@@ -104,4 +108,49 @@ hashmap_put(hashmap *map, void *key, void *value)
 			}
 		}
 	}
+}
+
+void * hashmap_del(hashmap *map, const void *key) {
+	hashmap_keyval *match;
+	hashmap_keyval *previous = NULL;
+
+	if (!map || !key) return NULL;
+
+	uint32_t bucket_index = (*map->hash)(key)%map->num_buckets;
+	
+	// try all buckets for a match to delete, repeat if other threads modified
+	while (true) {
+		previous = NULL;
+		for (match = map->buckets[bucket_index]; match; match = match->next) {
+			if ((*map->cmp)(key, match->key) == 0) {
+				break;
+			}
+			previous = match;
+		}
+		// no match, means nothing to delete 
+		if (!match) return NULL;
+
+		// a match was found, CAS-drop the link
+		if (previous) {
+			// drop this link, we don't care if this fails/another thread did the delete
+			bool success = __atomic_compare_exchange(&previous->next, &match, &match->next, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
+			if (success) {
+				return match->value;
+			}
+			hashmap_del_fail += 1;
+		}
+		// no previous bucket, empty bucket
+		else {
+			// set the head of the list to be whatever this node points to (NULL or other links) 
+			bool success = __atomic_compare_exchange(&map->buckets[bucket_index], &match, &match->next, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
+			if (success) {
+				return match->value;
+			}
+
+			// failure means at least one new entry was added, retry it all
+			hashmap_del_fail_new_head += 1;
+		}
+	}
+
+	return NULL;
 }
