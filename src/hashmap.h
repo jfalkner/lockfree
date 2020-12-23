@@ -4,6 +4,9 @@
  * This implementation is thread safe and lock free. It will perform well as long as
  * the initial bucket size is large enough.
  */
+#ifndef JFALKNER_HASHMAP_H
+#define JFALKNER_HASHMAP_H
+
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -59,3 +62,5 @@ extern bool hashmap_put(hashmap *map, const void *key, void *value);
  * return true just once, if multiple threads are attempting to delete the same key.
  */
 extern bool hashmap_del(hashmap *map, const void *key);
+
+#endif // JFALKNER_HASHMAP_H

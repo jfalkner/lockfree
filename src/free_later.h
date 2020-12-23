@@ -20,6 +20,8 @@
  * progressed with work, call `free_later_run()` to have every value in the staged
  * buffer released.
  */
+#ifndef JFALKNER_FREE_LATER_H
+#define JFALKNER_FREE_LATER_H
 
 
 // lifecycle events. _init() must be called before use and _term() once at the end
@@ -32,3 +34,5 @@ void free_later_stage(void);
 
 // adds a var to the cleanup later list
 void free_later(void *var, void release(void *var));
+
+#endif // JFALKNER_FREE_LATER_H
