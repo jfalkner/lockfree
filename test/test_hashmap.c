@@ -17,7 +17,13 @@ hashmap *map = NULL;
 #define NUM_WORK 100
 // state for the threads
 static pthread_t threads[NUM_THREADS];
+// state for the threads that test deletes
+static pthread_t threads_del[NUM_THREADS * 2];
 
+static uint32_t MAX_VAL_PLUS_ONE = NUM_THREADS * NUM_WORK + 1;
+
+extern volatile uint32_t hashmap_del_fail;
+extern volatile uint32_t hashmap_del_fail_new_head;
 extern volatile uint32_t hashmap_put_retries;
 extern volatile uint32_t hashmap_put_replace_fail;
 extern volatile uint32_t hashmap_put_head_fail;
@@ -78,11 +84,55 @@ multi_thread_add_vals(void) {
 	return true;
 }
 
-int
-main (int argc, char **argv)
+// adds a value over and over to test the del functionality
+void *
+add_val(void *args)
 {
-	free_later_init();
+	for (int j=0;j<NUM_WORK;j++) {
+		hashmap_put(map, &MAX_VAL_PLUS_ONE, &MAX_VAL_PLUS_ONE);
+	}
+	return NULL;
+}
 
+void *
+del_val(void *args)
+{
+	for (int j=0;j<NUM_WORK;j++) {
+		hashmap_del(map, &MAX_VAL_PLUS_ONE);
+	}
+	return NULL;
+}
+
+bool
+multi_thread_del(void) {
+	for (int i=0;i<NUM_THREADS;i++) {
+		int ret = pthread_create(&threads_del[i], NULL, add_val, NULL);
+		if (ret != 0) {
+			printf("Failed to create thread %d\n", i);
+			exit(1);
+		}
+		ret = pthread_create(&threads_del[NUM_THREADS + i], NULL, del_val, NULL);
+		if (ret != 0) {
+			printf("Failed to create thread %d\n", i);
+			exit(1);
+		}
+	}
+	// also add normal numbers to ensure they aren't clobbered
+	multi_thread_add_vals();
+	// wait for work to finish
+	for (int i=0;i<NUM_THREADS * 2;i++) {
+		int ret = pthread_join(threads_del[i], NULL);
+		if (ret != 0) {
+			printf("Failed to join thread %d\n", i);
+			exit(1);
+		}
+	}
+	return true;
+}
+
+bool
+test_add ()
+{
 	map = (hashmap *)hashmap_new(10, cmp_uint32, hash_uint32);
 
 	int loops = 0;
@@ -90,7 +140,7 @@ main (int argc, char **argv)
 		loops += 1;
 		if (!multi_thread_add_vals()) {
 			printf("Error. Failed to add values!\n");
-			return -1;
+			return false;
 		}
 
 		// check all the list entries
@@ -114,7 +164,63 @@ main (int argc, char **argv)
 		}
 
 	}
-	free_later_term();
 
 	printf("Done. Loops=%u\n", loops);
+	return true;
+}
+
+bool
+test_del(){
+	free_later_init();
+
+	// keep looping until a CAS retry was needed by hashmap_del
+	uint32_t loops = 0;
+	// make sure test counters are zeroed
+	hashmap_del_fail = 0;
+	hashmap_del_fail_new_head = 0;
+
+	while (hashmap_del_fail == 0 || hashmap_del_fail_new_head == 0) {
+		map = hashmap_new(10, cmp_uint32, hash_uint32);
+
+		// multi-thread add values
+		if (!multi_thread_del()) {
+			printf("test_del() is failing. Can't complete multi_thread_del()");
+			return false;
+		}
+		loops++;
+
+		// check all the list entries
+		uint32_t TOTAL = NUM_THREADS * NUM_WORK;
+		uint32_t found = 0;
+		for (uint32_t i=0;i<TOTAL;i++) {
+			uint32_t *v = (uint32_t *)hashmap_get(map, &i);
+			if (v && *v == i) {
+				found++;
+			}
+			else {
+				printf("Cound not find %d in the hashmap\n", i);
+			}
+		}
+		if (found != TOTAL) {
+			printf("test_del() is failing. Not all values found!?");
+			return false;
+		}
+	}
+	printf("Done. Needed %u loops\n", loops);
+	return true;
+}
+
+int
+main (int argc, char **argv)
+{
+	free_later_init();
+
+	if (!test_add()) {
+		printf("Failed multi-threaded add test.");
+	}
+	if (!test_del()) {
+		printf("Failed multi-threaded del test.");
+	}
+
+	free_later_term();
 }

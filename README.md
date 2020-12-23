@@ -261,6 +261,17 @@ Be careful when assuming that this CAS-style approach is always better. It gener
 
 Hopefully, this repo matures enough that don't have to fret over complexity of CAS-style thread safety. Just use its data structures!
 
+# Deleting Data
+
+CAS-based deletion of data is supported, but it is important to consider that memory management relies onexternal algortihms. The main thing the CAS operations do is to hide allocated memory from a future, possibly concurrent use, of the data structure. An external algorithm must free or otherwise handle memory when it knows that all concurrent processes are no longer using it.
+
+For example, consider `hashmap`.
+
+1. Internal state is managed by the hashmap to populate buckets with linked lists. `hashmap_keyval` nodes are allocated as needed; however, free'ing of those structs cannot be done immediately during a `hashmap_del` call. Other threads may be concurrently using the `hashmap_keyval`.
+
+2. `hashmap_del` may return a value. It'll only do it once per delete, and the calling thread must buffer the pointer for appropriate later cleanup. It can't immediatley be free'd because other threads may also be using the same pointer.
+
+Several external algorithm examples will be added. A simple strategy is to not free the memory or to let it be part if a memory pool. This fails when the data structure is heavily used and must manage memory. In these cases, options incude a buffer that free's memory after it accumulates a certain amount or passes a time limit. Another option is a dedicated garbage-collection-like process that frees memory when it knknows that no other thread is using it.
 
 # Tests
 
