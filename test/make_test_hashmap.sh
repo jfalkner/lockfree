@@ -2,9 +2,10 @@ set -e
 
 # compile the list
 cd ../src
+cc -ggdb -O3 -fPIC -Wall -march=native -msse4.2 -D_GNU_SOURCE -fPIC -shared -MD  -c -o free_later.o free_later.c
 cc -ggdb -O3 -fPIC -Wall -march=native -msse4.2 -D_GNU_SOURCE -fPIC -shared -MD  -c -o list.o list.c
 cc -ggdb -O3 -fPIC -Wall -march=native -msse4.2 -D_GNU_SOURCE -fPIC -shared -MD  -c -o hashmap.o hashmap.c
-gcc -mcx16 -fPIC -shared -o lockfree.so hashmap.o list.o -lm -lpthread
+gcc -mcx16 -fPIC -shared -o lockfree.so hashmap.o list.o free_later.o -lm -lpthread
 cp lockfree.so liblockfree.so
 
 cd ../test

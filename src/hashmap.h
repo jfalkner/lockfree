@@ -8,14 +8,14 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
-#include "list.h"
-
+// links in the linked lists that each bucket uses
 typedef struct hashmap_keyval_s {
 	struct hashmap_keyval_s *next;
-	void *key;
+	const void *key;
 	void *value;
 } hashmap_keyval;
 
+// main hashmap struct with buckets of linked lists
 typedef struct hashmap_s {
 	// buckets
 	hashmap_keyval **buckets;
@@ -25,25 +25,37 @@ typedef struct hashmap_s {
 	uint32_t length;
 
 	// pointer to the hash and comparison functions
-	uint32_t (*hash)(const void *key);
+	uint64_t (*hash)(const void *key);
 	uint8_t (*cmp)(const void *x, const void *y);
-
-	// CAS failures for test
-	uint32_t put_retries;
+	
+	// custom memory management of internal linked lists 
+	void *opaque;
+	hashmap_keyval * (*create_node)(void *opaque, const void *key, void *data);
+	void (*destroy_node)(void *opaque, hashmap_keyval *node);
 } hashmap;
 
 
-void * hashmap_new(uint32_t hint, uint8_t cmp(const void *x, const void *y), uint32_t hash(const void *key));
+/**
+ * Creates and initializes a new hashmap
+ */
+void * hashmap_new(uint32_t hint, uint8_t cmp(const void *x, const void *y), uint64_t hash(const void *key));
 
 /**
  * Returns a value mapped to the key or NULL, if no entry exists for the given key
  */
-void * hashmap_get(hashmap *map, void *key);
+extern void * hashmap_get(hashmap *map, const void *key);
 
 /**
  * Puts the given key, value pair in the map
  *
- * Returns the value of the previous entry with the same key, if one existed. Otherwise,
- * returns NULL.
+ * Returns true if an existing matching key was replaced. Otherwise, false.
  */
-void * hashmap_put(hashmap *map, void *key, void *value);
+extern bool hashmap_put(hashmap *map, const void *key, void *value);
+
+/**
+ * Removes the given key, value pair in the map
+ *
+ * Returns true if a key was found. Otherwise, false. This method is guaranteed to
+ * return true just once, if multiple threads are attempting to delete the same key.
+ */
+extern bool hashmap_del(hashmap *map, const void *key);

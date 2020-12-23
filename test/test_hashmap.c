@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "free_later.h"
 #include "hashmap.h"
 
 // global hash map
@@ -13,9 +14,13 @@ hashmap *map = NULL;
 // how many threads should run in parallel
 #define NUM_THREADS 10
 // how many times the work loop should repeat
-#define NUM_WORK 10
+#define NUM_WORK 100
 // state for the threads
 static pthread_t threads[NUM_THREADS];
+
+extern volatile uint32_t hashmap_put_retries;
+extern volatile uint32_t hashmap_put_replace_fail;
+extern volatile uint32_t hashmap_put_head_fail;
 
 uint8_t
 cmp_uint32(const void *x, const void *y) {
@@ -30,7 +35,7 @@ cmp_uint32(const void *x, const void *y) {
 	return 0;
 }
 
-uint32_t
+uint64_t
 hash_uint32(const void *key) {
 	return *(uint32_t *)key;
 }
@@ -76,10 +81,12 @@ multi_thread_add_vals(void) {
 int
 main (int argc, char **argv)
 {
+	free_later_init();
+
 	map = (hashmap *)hashmap_new(10, cmp_uint32, hash_uint32);
 
 	int loops = 0;
-	while (map->put_retries < 10) {
+	while (hashmap_put_retries == 0) {
 		loops += 1;
 		if (!multi_thread_add_vals()) {
 			printf("Error. Failed to add values!\n");
@@ -99,12 +106,15 @@ main (int argc, char **argv)
 			}
 		}
 		if (found == TOTAL) {
-			printf("Loop %d. All values found.\n", loops);
+			printf("Loop %d. All values found. hashmap_put_retries=%u, hashmap_put_head_fail=%u, hashmap_put_replace_fail=%u\n",
+				loops, hashmap_put_retries, hashmap_put_head_fail, hashmap_put_replace_fail);
 		}
 		else {
 			printf("Found %d of %d values. Where are the missing ones?", found, TOTAL);
 		}
 
 	}
+	free_later_term();
+
 	printf("Done. Loops=%u\n", loops);
 }

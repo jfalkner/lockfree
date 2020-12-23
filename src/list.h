@@ -20,9 +20,7 @@ typedef struct list_node_s {
 typedef struct list_s {
 	// list of nodes in the linked-list
 	list_node *head;
-	// tracking for CAS retries that is used by tests
-	uint32_t retries_empty;
-	uint32_t retries_populated;
+	uint32_t length;
 } list;
 
 list * list_new();
