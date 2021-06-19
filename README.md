@@ -7,11 +7,6 @@ intended to be a learning tool for anyone exploring how to use [atomic operation
 See the summary of how it works.
 
 
-# Performance Tests
-
-TODO: show performance scaling with multiple threads
-
-
 # Thread-safe, Atomic Lock-Free Operations
 
 If multiple threads access the same variables directly or through data structures, synchronization is usually required. Often a "lock" is somehow enforced in user space so that only one thread at a time will access the shared memory location. The core thing this code does is avoid a user-space lock in favor of letting the computer's hardware lock the memory, usually with at atomic compare-and-swap (CAS) style assembly instruction. Typically hardware locks are much, much faster than user-space software-based locks. Here is a [great blog article](https://attractivechaos.wordpress.com/2011/10/06/multi-threaded-programming-efficiency-of-locking/) to read with different synchronization approaches in C and relative performance.
@@ -277,8 +272,3 @@ Several external algorithm examples will be added. A simple strategy is to not f
 
 Tests are in the `test` sub-directory. Each test has a `make_test_....sh` script 
 that'll compile and test the code. See the tests for example usage.
-
-
-# Data Structures
-
-TODO: a short list of all datastructures available here.
